@@ -99,6 +99,10 @@ class PortNamespace(collections.MutableMapping, Port):
         self._ports = {}
 
     @property
+    def default(self):
+        return {name: port.default for name, port in self.ports.items()}
+
+    @property
     def ports(self):
         return self._ports
 
