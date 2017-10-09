@@ -4,7 +4,8 @@ Sphinx cheatsheet
 A brief overview of some of the main functions of Sphinx
 as used in the aiida documentation. View :ref:`this-page` to see
 how this page was formatted. This is only a brief outline for more
-please see `the Sphinx documentation <http://sphinx-doc.org/contents.html>`_
+please see `the Sphinx documentation <http://sphinx-doc.org/contents.html>`_.
+AiiDA also defines some custom Sphinx directives, described :ref:`here <aiida-sphinxext>`.
 
 
 Main Titles and Subtitles
