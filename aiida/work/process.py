@@ -302,11 +302,19 @@ class Process(plum.process.Process):
     @classmethod
     def new_instance(cls, inputs=None, pid=None, logger=None):
         if inputs is not None:
-            for name, port in cls.spec().inputs.items():
-                if name in inputs:
-                    if hasattr(port, '_serialize_fct') and port._serialize_fct is not None:
-                        inputs[name] = port._serialize_fct(inputs[name])
+            cls._serialize_inputs(cls.spec().inputs, inputs)
         return super(Process, cls).new_instance(inputs=inputs, pid=pid, logger=logger)
+
+    @classmethod
+    def _serialize_inputs(cls, portnamespace, inputs):
+        for name, port in portnamespace.items():
+            if name not in inputs:
+                continue
+            if isinstance(port, PortNamespace):
+                cls._serialize_inputs(port, inputs[name])
+            else:
+                if hasattr(port, '_serialize_fct') and port._serialize_fct is not None:
+                    inputs[name] = port._serialize_fct(inputs[name])
 
     def get_deserialized_input(self, name):
         port = self.spec().inputs.get(name, None)
