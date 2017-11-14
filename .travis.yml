@@ -42,7 +42,7 @@ install:
     # Upgrade pip setuptools and wheel to be able to run the next command
     - pip install -U pip wheel setuptools
     # Unreleased plum version required for fast-forwarding
-    - pip install -U git+https://github.com/greschd/plumpy.git@edge
+    - pip install git+https://github.com/greschd/plumpy@submit_with_process_type
     # Install AiiDA with some optional dependencies
     - pip install .[REST,docs,atomic_tools,testing,dev_precommit,dev_sphinxext]
 
@@ -61,6 +61,10 @@ env:
 
 before_script:
     - .travis-data/setup_profiles.sh
+    # make the time between tests shorter to speed-up tests
+    # This script might need to be adapted when changing the logic
+    # of the daemon loops or the schema of the config.json file
+    - if [ "$TEST_TYPE" == "tests" ] ; then .travis-data/set_daemon_times.py $TEST_AIIDA_BACKEND ; fi
     - .travis-data/before_script.sh
 
 script: .travis-data/test_script.sh

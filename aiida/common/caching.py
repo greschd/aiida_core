@@ -2,67 +2,121 @@
 # -*- coding: utf-8 -*-
 
 import os
-import yaml
+import copy
+from functools import wraps
+from contextlib import contextmanager
 try:
     from collections import ChainMap
 except ImportError:
     from chainmap import ChainMap
 
+import yaml
+from plum.util import load_class
+from future.utils import raise_from
+from plum.exceptions import ClassNotFoundException
+
+import aiida
+from aiida.common.exceptions import ConfigurationError
 from aiida.common.extendeddicts import Enumerate
 from aiida.common.setup import AIIDA_CONFIG_FOLDER
 from aiida.backends.utils import get_current_profile
 
-__all__ = ['CONFIG']
+__all__ = ['get_use_cache', 'enable_caching', 'disable_caching']
 
 config_keys = Enumerate((
-    'use_cache', 'fast_forward', 'default', 'enabled', 'disabled'
+    'default', 'enabled', 'disabled'
 ))
 
 DEFAULT_CONFIG = {
-    config_keys.use_cache: {config_keys.default: False},
-    config_keys.fast_forward: {
-        config_keys.default: False,
-        config_keys.enabled: [],
-        config_keys.disabled: [],
-    }
+    config_keys.default: False,
+    config_keys.enabled: [],
+    config_keys.disabled: [],
 }
 
-def _get_config():
+def _get_config(config_file):
     try:
-        with open(os.path.join(os.path.expanduser(AIIDA_CONFIG_FOLDER), 'cache_config.yml'), 'r') as f:
+        with open(config_file, 'r') as f:
             config = yaml.load(f)[get_current_profile()]
-        # validate configuration
-        for key, value in config.items():
-            error_msg = "Configuration error: Invalid key '{}' in cache_config.yml"
-            if key not in DEFAULT_CONFIG:
-                raise ValueError(error_msg.format(key))
-            for sub_key in value:
-                if sub_key not in DEFAULT_CONFIG[key]:
-                    raise ValueError(error_msg.format(sub_key))
-
-        # add defaults where config is missing
-        for key, default_config in DEFAULT_CONFIG.items():
-            config[key] = ChainMap(config.get(key, {}), default_config)
-        return config
-
     # no config file, or no config for this profile
     except (OSError, IOError, KeyError):
         return DEFAULT_CONFIG
 
-CONFIG = _get_config()
+    # validate configuration
+    for key in config:
+        if key not in DEFAULT_CONFIG:
+            raise ValueError(
+                "Configuration error: Invalid key '{}' in cache_config.yml".format(key)
+            )
 
-def get_use_cache_default():
-    return CONFIG[config_keys.use_cache][config_keys.default]
+    # add defaults where config is missing
+    for key, default_config in DEFAULT_CONFIG.items():
+        config[key] = config.get(key, default_config)
 
-def get_fast_forward_enabled(class_name):
-    fast_forward_config = CONFIG[config_keys.fast_forward]
-    enabled = class_name in fast_forward_config[config_keys.enabled]
-    disabled = class_name in fast_forward_config[config_keys.disabled]
-    if enabled and disabled:
-        raise ValueError('Invalid configuration: Fast-forwarding for {} is both enabled and disabled.'.format(class_name))
-    elif enabled:
-        return True
-    elif disabled:
-        return False
-    else:
-        return fast_forward_config[config_keys.default]
+    # load classes
+    try:
+        for key in [config_keys.enabled, config_keys.disabled]:
+            config[key] = [load_class(c) for c in config[key]]
+    except (ImportError, ClassNotFoundException) as err:
+        raise_from(
+            ConfigurationError("Unknown class given in 'cache_config.yml': '{}'".format(err)),
+            err
+        )
+    return config
+
+_CONFIG = {}
+
+def configure(config_file=os.path.join(os.path.expanduser(AIIDA_CONFIG_FOLDER), 'cache_config.yml')):
+    """
+    Reads the caching configuration file and sets the _CONFIG variable.
+    """
+    global _CONFIG
+    _CONFIG.clear()
+    _CONFIG.update(_get_config(config_file=config_file))
+
+def _with_config(func):
+    @wraps(func)
+    def inner(*args, **kwargs):
+        if not _CONFIG:
+            configure()
+        return func(*args, **kwargs)
+    return inner
+
+@_with_config
+def get_use_cache(node_class=None):
+    if node_class is not None:
+        enabled = node_class in _CONFIG[config_keys.enabled]
+        disabled = node_class in _CONFIG[config_keys.disabled]
+        if enabled and disabled:
+            raise ValueError('Invalid configuration: Fast-forwarding for {} is both enabled and disabled.'.format(node_class))
+        elif enabled:
+            return True
+        elif disabled:
+            return False
+    return _CONFIG[config_keys.default]
+
+@contextmanager
+@_with_config
+def _reset_config():
+    global _CONFIG
+    config_copy = copy.deepcopy(_CONFIG)
+    yield
+    _CONFIG.clear()
+    _CONFIG.update(config_copy)
+
+@contextmanager
+def enable_caching(node_class=None):
+    with _reset_config():
+        if node_class is None:
+            _CONFIG[config_keys.default] = True
+        else:
+            _CONFIG[config_keys.enabled].append(node_class)
+        yield
+
+@contextmanager
+def disable_caching(node_class=None):
+    with _reset_config():
+        if node_class is None:
+            _CONFIG[config_keys.default] = True
+        else:
+            _CONFIG[config_keys.disabled].append(node_class)
+        yield

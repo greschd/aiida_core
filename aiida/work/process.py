@@ -398,7 +398,19 @@ class Process(plum.process.Process):
         """
         super(Process, self).on_finish()
         self.calc._set_attr(WorkCalculation.FINISHED_KEY, True)
-        self.calc.seal()
+
+    @override
+    def on_destroy(self):
+        """
+        Called when a Process enters the DESTROYED state which should be
+        the final process state and so we seal the calculation node
+        """
+        super(Process, self).on_destroy()
+        if self.calc.has_finished():
+            try:
+                self.calc.seal()
+            except exceptions.ModificationNotAllowed:
+                pass
 
     @override
     def _on_output_emitted(self, output_port, value, dynamic):
@@ -508,7 +520,7 @@ class Process(plum.process.Process):
         self._calc = self.create_db_record()
         self._setup_db_record()
         if self.inputs._store_provenance:
-            self.calc.store_all(use_cache=self._fast_forward_enabled())
+            self.calc.store_all(use_cache=self._use_cache_enabled())
             if self.calc.has_finished_ok():
                 self._state = plum.process.ProcessState.FINISHED
                 for name, value in self.calc.get_outputs_dict(link_type=LinkType.RETURN).items():
@@ -563,15 +575,15 @@ class Process(plum.process.Process):
             if label is not None:
                 self._calc.label = label
 
-    def _fast_forward_enabled(self):
+    def _use_cache_enabled(self):
         # First priority: inputs
         try:
-            return self._parsed_inputs['_fast_forward']
+            return self._parsed_inputs['_use_cache']
         # Second priority: config
         except KeyError:
             return (
-                caching.get_fast_forward_enabled(type(self).__name__) or
-                caching.get_fast_forward_enabled(type(self._calc).__name__)
+                caching.get_use_cache(type(self)) or
+                caching.get_use_cache(type(self._calc))
             )
 
     def _flat_inputs(self):
@@ -725,9 +737,10 @@ class _ProcessFinaliser(plum.process_monitor.ProcessMonitorListener):
         except ValueError:
             pass
         else:
+            calc_node._set_attr(calc_node.FAILED_KEY, True)
             calc_node.seal()
-        aiida.work.util.ProcessStack.pop(pid=pid)
-
+        finally:
+            aiida.work.util.ProcessStack.pop(pid=pid)
 
 # Have a global singleton to take care of finalising all processes
 _finaliser = _ProcessFinaliser()
