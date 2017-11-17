@@ -238,9 +238,9 @@ def conv_to_fortran(val, quote_strings=True):
         return ("{:18.10e}".format(val)).replace('e', 'd')
     if isinstance(val, basestring):
         if quote_strings:
-            template = "{!s}"
-        else:
             template = "'{!s}'"
+        else:
+            template = "{!s}"
         return  template.format(val)
 
     raise ValueError("Invalid value '{}' of type '{}' passed, accepts only bools, ints, floats and strings".format(val, type(val)))
