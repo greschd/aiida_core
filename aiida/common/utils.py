@@ -240,8 +240,18 @@ def conv_to_fortran(val, quote_strings=True):
         if quote_strings:
             template = "'{!s}'"
         else:
-            template = "{!s}"
-        return  template.format(val)
+            val_str = '.false.'
+    elif isinstance(val, numbers.Integral):
+        val_str = "{:d}".format(val)
+    elif isinstance(val, numbers.Real):
+        val_str = ("{:18.10e}".format(val)).replace('e', 'd')
+    elif isinstance(val, basestring):
+        if quote_strings:
+            val_str = "'{!s}'".format(val)
+        else:
+            val_str = "{!s}".format(val)
+    else:
+        raise ValueError("Invalid value '{}' of type '{}' passed, accepts only bools, ints, floats and strings".format(val, type(val)))
 
     raise ValueError("Invalid value '{}' of type '{}' passed, accepts only bools, ints, floats and strings".format(val, type(val)))
 
@@ -258,10 +268,29 @@ def conv_to_fortran_withlists(val, quote_strings=True):
     if (isinstance(val, (list, tuple))):
         out_list = []
         for thing in val:
-            out_list.append(conv_to_fortran(thing, quote_strings=quote_strings))
+            out_list.append(conv_to_fortran(thing,quote_strings=quote_strings))
         val_str = ", ".join(out_list)
         return val_str
-    return conv_to_fortran(val, quote_strings=quote_strings)
+    if (isinstance(val, bool)):
+        if val:
+            val_str = '.true.'
+        else:
+            val_str = '.false.'
+    elif (isinstance(val, (int, long))):
+        val_str = "{:d}".format(val)
+    elif (isinstance(val, float)):
+        val_str = ("{:18.10e}".format(val)).replace('e', 'd')
+    elif (isinstance(val, basestring)):
+        if quote_strings:
+            val_str = "'{!s}'".format(val)
+        else:
+            val_str = "{!s}".format(val)
+    else:
+        raise ValueError("Invalid value passed, accepts only bools, ints, "
+                         "floats and strings")
+
+    return val_str
+
 
 def get_unique_filename(filename, list_of_filenames):
     """
