@@ -292,7 +292,9 @@ class Persistence(plum.persistence.pickle_persistence.PicklePersistence):
                 # Don't leave a half-baked pickle around
                 if path.isfile(filename):
                     os.remove(filename)
-                raise
+                # Abort the process
+                process.abort('Could not save process pickle, {}: {}'.format(type(exception).__name__, exception))
+                raise exception
             f.flush()
 
     # region ProcessListener messages
