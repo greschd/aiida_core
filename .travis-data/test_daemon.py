@@ -147,6 +147,7 @@ def create_cache_calc(code, counter, inputval):
     )
     print "[{}] created cached calculation.".format(counter)
     assert 'cached_from' in calc.extras()
+    assert calc.get_hash() == calc.get_extra('hash')
     return calc, expected_result
 
 def main():
