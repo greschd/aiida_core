@@ -31,7 +31,7 @@ from aiida.common.old_pluginloader import get_query_type_string
 from aiida.backends.utils import validate_attribute_key
 
 _NO_DEFAULT = tuple()
-
+_HASH_EXTRA_KEY = '_aiida_hash'
 
 def clean_value(value):
     """
@@ -1141,9 +1141,6 @@ class AbstractNode(object):
             return
             yield # Needed after return to convert it to a generator
         for extra in self._db_iterextras():
-            # Don't return if key == hash
-            if extra[0] == 'hash':
-                continue
             yield extra
 
     def iterattrs(self):
@@ -1573,7 +1570,7 @@ class AbstractNode(object):
             if use_cache is None:
                 use_cache = get_use_cache(type(self))
             # Retrieve the cached node.
-            same_node = self.get_same_node() if use_cache else None
+            same_node = self._get_same_node() if use_cache else None
             if same_node is not None:
                 self._store_from_cache(same_node, with_transaction=with_transaction)
                 self._add_outputs_from_cache(same_node)
@@ -1614,7 +1611,7 @@ class AbstractNode(object):
             raise ValueError("Cannot use cache from nodes with RETURN links.")
 
         self.store(with_transaction=with_transaction, use_cache=False)
-        self.set_extra('cached_from', cache_node.uuid)
+        self.set_extra('_aiida_cached_from', cache_node.uuid)
 
     def _add_outputs_from_cache(self, cache_node):
         # add CREATE links
@@ -1688,22 +1685,53 @@ class AbstractNode(object):
         ]
 
     def rehash(self):
-        self.set_extra('hash', self.get_hash())
+        """
+        Re-generates the stored hash of the Node.
+        """
+        self.set_extra(_HASH_EXTRA_KEY, self.get_hash())
 
-    def get_same_node(self):
-        if not self._cacheable:
+    def clear_hash(self):
+        """
+        Sets the stored hash of the Node to None.
+        """
+        self.set_extra(_HASH_EXTRA_KEY, None)
+
+    def _get_same_node(self):
+        """
+        Returns a stored node from which the current Node can be cached, meaning that the returned Node is a valid cache, and its ``_aiida_hash`` attribute matches ``self.get_hash()``.
+
+        If there are multiple valid matches, the first one is returned. If no matches are found, ``None`` is returned.
+
+        Note that after ``self`` is stored, this function can return ``self``.
+        """
+        try:
+            return next(self._iter_all_same_nodes())
+        except StopIteration:
             return None
+
+    def get_all_same_nodes(self):
+        """
+        Return a list of stored nodes which match the type and hash of the current node. For the stored nodes, the ``_aiida_hash`` extra is checked to determine the hash, while ``self.get_hash()`` is executed on the current node.
+
+        Only nodes which are a valid cache are returned. If the current node is already stored, it can be included in the returned list if ``self.get_hash()`` matches its ``_aiida_hash``.
+        """
+        return list(self._iter_all_same_nodes())
+
+    def _iter_all_same_nodes(self):
+        """
+        Returns an iterator of all same nodes.
+        """
+        if not self._cacheable:
+            return iter(())
 
         from aiida.orm.querybuilder import QueryBuilder
 
         hash_ = self.get_hash()
         if hash_:
             qb = QueryBuilder()
-            qb.append(self.__class__, filters={'extras.hash': hash_}, project='*', subclassing=False)
-            for same_node, in qb.iterall():
-                if same_node._is_valid_cache():
-                    return same_node
-        return None
+            qb.append(self.__class__, filters={'extras._aiida_hash': hash_}, project='*', subclassing=False)
+            same_nodes = (n[0] for n in qb.iterall())
+        return (n for n in same_nodes if n._is_valid_cache())
 
     def _is_valid_cache(self):
         """

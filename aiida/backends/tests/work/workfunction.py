@@ -11,6 +11,7 @@ import plum.process_monitor
 from aiida.backends.testbase import AiidaTestCase
 from aiida.work.workfunction import workfunction
 from aiida.orm.data.base import get_true_node, Int
+from aiida.orm import load_node
 from aiida.work.run import run
 import aiida.work.util as util
 from aiida.common import caching
@@ -61,4 +62,4 @@ class TestWf(AiidaTestCase):
 
     def _check_hash_consistent(self, pid):
         wc = load_node(pid)
-        self.assertEqual(wc.get_hash(), wc.get_extra('hash'))
+        self.assertEqual(wc.get_hash(), wc.get_extra('_aiida_hash'))
