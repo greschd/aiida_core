@@ -25,6 +25,8 @@ def submit(process_class, **inputs):
     :return: the calculation node of the process
     """
     assert not utils.is_workfunction(process_class), 'Cannot submit a workfunction'
+    process_class, inputs = runners._expand_builder(process_class, inputs)
+    inputs = runners._create_inputs_dictionary(process_class, **inputs)
 
     # Use a context manager to make sure connection is closed at end
     with rmq.new_blocking_control_panel() as control_panel:

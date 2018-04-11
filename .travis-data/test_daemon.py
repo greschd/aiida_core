@@ -18,9 +18,10 @@ from aiida.orm.data.int import Int
 from aiida.orm.data.str import Str
 from aiida.orm.data.list import List
 from aiida.work.launch import run_get_node, submit
+from aiida.work.class_loader import CLASS_LOADER
 from workchains import (
     NestedWorkChain, DynamicNonDbInput, DynamicDbInput, DynamicMixedInput, ListEcho, InlineCalcRunnerWorkChain,
-    WorkFunctionRunnerWorkChain, NestedInputNamespace
+    WorkFunctionRunnerWorkChain, NestedInputNamespace, SerializeWorkChain
 )
 
 ParameterData = DataFactory('parameter')
@@ -273,6 +274,10 @@ def main():
     value_db = Int(2)
     pk = submit(DynamicMixedInput, namespace={'inputs': {'input_non_db': value_non_db, 'input_db': value_db}}).pk
     expected_results_workchains[pk] = value_non_db + value_db
+
+    print("Submitting the serializing workchain")
+    pk = submit(SerializeWorkChain, test=Int).pk
+    expected_results_workchains[pk] = CLASS_LOADER.class_identifier(Int)
 
     print "Submitting the ListEcho workchain."
     list_value = List()
