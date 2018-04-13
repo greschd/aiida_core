@@ -21,7 +21,6 @@ from aiida.common.exceptions import (InvalidOperation, RemoteOperationError)
 from aiida.common import exceptions
 from aiida.common.lang import override
 from aiida.daemon import execmanager
-from aiida.orm.authinfo import AuthInfo
 from aiida.orm.calculation.job import JobCalculation
 from aiida.orm.calculation.job import JobCalculationFinishStatus
 from aiida.scheduler.datastructures import job_states
@@ -48,13 +47,9 @@ class TransportTask(plumpy.Future):
     """ A general task that requires transport """
 
     def __init__(self, calc_node, transport_queue):
-        from aiida.orm.authinfo import AuthInfo
-
         super(TransportTask, self).__init__()
         self._calc = calc_node
-        self._authinfo = AuthInfo.get(
-            computer=calc_node.get_computer(),
-            user=calc_node.get_user())
+        self._authinfo = calc_node.get_computer().get_authinfo(calc_node.get_user())
         transport_queue.call_me_with_transport(self._authinfo, self._execute)
 
     def execute(self, transport):
@@ -477,7 +472,9 @@ class JobProcess(processes.Process):
         """
         calc_state = self.calc.get_state()
 
-        if calc_state != calc_states.NEW:
+        if calc_state == calc_states.FINISHED:
+            return 0
+        elif calc_state != calc_states.NEW:
             raise exceptions.InvalidOperation(
                 'Cannot submit a calculation not in {} state (the current state is {})'.format(
                     calc_states.NEW, calc_state

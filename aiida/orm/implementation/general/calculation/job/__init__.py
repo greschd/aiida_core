@@ -12,7 +12,6 @@ import copy
 import datetime
 import enum
 
-from aiida.backends.utils import get_automatic_user
 from aiida.common.datastructures import calc_states
 from aiida.common.exceptions import ModificationNotAllowed, MissingPluginError
 from aiida.common.links import LinkType
@@ -35,7 +34,6 @@ SCHEDULER_STATE_KEY = 'attributes.scheduler_state'
 PROCESS_STATE_KEY = 'attributes.{}'.format(AbstractCalculation.PROCESS_STATE_KEY)
 FINISH_STATUS_KEY = 'attributes.{}'.format(AbstractCalculation.FINISH_STATUS_KEY)
 DEPRECATION_DOCS_URL = 'http://aiida-core.readthedocs.io/en/latest/process/index.html#the-process-builder'
-
 
 _input_subfolder = 'raw_input'
 
@@ -87,7 +85,7 @@ class AbstractJobCalculation(AbstractCalculation):
     @classproperty
     def _updatable_attributes(cls):
         return super(AbstractJobCalculation, cls)._updatable_attributes + (
-            'job_id', 'scheduler_state','scheduler_lastchecktime', 'last_jobinfo', 'remote_workdir',
+            'job_id', 'scheduler_state', 'scheduler_lastchecktime', 'last_jobinfo', 'remote_workdir',
             'retrieve_list', 'retrieve_temporary_list', 'retrieve_singlefile_list', 'state'
         )
 
@@ -755,7 +753,7 @@ class AbstractJobCalculation(AbstractCalculation):
         for item in retrieve_list:
             if not isinstance(item, basestring):
                 if (not (isinstance(item, (tuple, list))) or
-                            len(item) != 3):
+                        len(item) != 3):
                     raise ValueError(
                         "You should pass a list containing either "
                         "strings or lists/tuples"
@@ -802,8 +800,8 @@ class AbstractJobCalculation(AbstractCalculation):
                     )
 
                 if (not (isinstance(item[0], basestring)) or
-                    not (isinstance(item[1], basestring)) or
-                    not (isinstance(item[2], int))):
+                        not (isinstance(item[1], basestring)) or
+                        not (isinstance(item[2], int))):
                     raise ValueError(
                         'You have to pass a list (or tuple) of lists, with remotepath(string), '
                         'localpath(string) and depth (integer)'
@@ -978,6 +976,7 @@ class AbstractJobCalculation(AbstractCalculation):
 
         from aiida.orm.querybuilder import QueryBuilder
         from tabulate import tabulate
+        from aiida.orm.backend import construct_backend
 
         projection_label_dict = {
             'pk': 'PK',
@@ -999,6 +998,8 @@ class AbstractJobCalculation(AbstractCalculation):
         }
 
         now = timezone.now()
+
+        backend = construct_backend()
 
         # Let's check the states:
         if states:
@@ -1040,7 +1041,7 @@ class AbstractJobCalculation(AbstractCalculation):
 
             # Filter on the users, if not all users
             if not all_users:
-                user_id = get_automatic_user().id
+                user_id = backend.users.get_automatic_user().id
                 calculation_filters['user_id'] = {'==': user_id}
 
             if past_days is not None:
@@ -1068,7 +1069,6 @@ class AbstractJobCalculation(AbstractCalculation):
 
         qb.append(type='computer', computer_of='calculation', tag='computer')
         qb.append(type='user', creator_of="calculation", tag="user")
-
 
         projections_dict = {'calculation': [], 'user': [], 'computer': []}
 
@@ -1205,7 +1205,6 @@ class AbstractJobCalculation(AbstractCalculation):
                             1].split('.')[0].rsplit(":", 1)[0]])
             except (KeyError, ValueError):
                 pass
-
 
         if PROCESS_STATE_KEY in d['calculation']:
 
@@ -1350,15 +1349,13 @@ class AbstractJobCalculation(AbstractCalculation):
         raise NotImplementedError
 
     def _get_authinfo(self):
-        from aiida.orm.authinfo import AuthInfo
         from aiida.common.exceptions import NotExistent
 
         computer = self.get_computer()
         if computer is None:
             raise NotExistent("No computer has been set for this calculation")
 
-        return AuthInfo.get(computer=computer._dbcomputer,
-                            user=self.dbnode.user)
+        return self.backend.authinfos.get(computer=computer, aiidauser=self.get_user())
 
     def _get_transport(self):
         """
@@ -1378,11 +1375,10 @@ class AbstractJobCalculation(AbstractCalculation):
         from aiida.work.launch import submit
         warnings.warn(
             'directly creating and submitting calculations is deprecated, use the {}\nSee:{}'.format(
-            'ProcessBuilder', DEPRECATION_DOCS_URL), DeprecationWarning
+                'ProcessBuilder', DEPRECATION_DOCS_URL), DeprecationWarning
         )
 
         submit(ContinueJobCalculation, _calc=self)
-
 
     def set_parser_name(self, parser):
         """
@@ -1555,11 +1551,11 @@ class AbstractJobCalculation(AbstractCalculation):
                          if calcinfo.retrieve_list is not None
                          else [])
         if (job_tmpl.sched_output_path is not None and
-                    job_tmpl.sched_output_path not in retrieve_list):
+                job_tmpl.sched_output_path not in retrieve_list):
             retrieve_list.append(job_tmpl.sched_output_path)
         if not job_tmpl.sched_join_files:
             if (job_tmpl.sched_error_path is not None and
-                        job_tmpl.sched_error_path not in retrieve_list):
+                    job_tmpl.sched_error_path not in retrieve_list):
                 retrieve_list.append(job_tmpl.sched_error_path)
         self._set_retrieve_list(retrieve_list)
 
@@ -1578,7 +1574,8 @@ class AbstractJobCalculation(AbstractCalculation):
         self._set_retrieve_singlefile_list(retrieve_singlefile_list)
 
         # Handle the retrieve_temporary_list
-        retrieve_temporary_list = (calcinfo.retrieve_temporary_list if calcinfo.retrieve_temporary_list is not None else [])
+        retrieve_temporary_list = (
+            calcinfo.retrieve_temporary_list if calcinfo.retrieve_temporary_list is not None else [])
         self._set_retrieve_temporary_list(retrieve_temporary_list)
 
         # the if is done so that if the method returns None, this is
@@ -1972,6 +1969,7 @@ class AbstractJobCalculation(AbstractCalculation):
         properties.
         """
         return self.get_state(from_attribute=True)
+
 
 class CalculationResultManager(object):
     """

@@ -641,11 +641,22 @@ class Calculation(VerdiCommandWithSubcommands):
 
 
     def calculation_kill(self, *args):
+        """
+        Kill a calculation.
+
+        Pass a list of calculation PKs to kill them.
+        If you also pass the -f option, no confirmation will be asked.
+        """
         import argparse
         from aiida import try_load_dbenv
         try_load_dbenv()
         from aiida import work
         from aiida.cmdline import wait_for_confirmation
+        from aiida.orm.calculation.job import JobCalculation as Calc
+        from aiida.common.exceptions import NotExistent, InvalidOperation, \
+            RemoteOperationError
+
+        import argparse
 
         parser = argparse.ArgumentParser(
             prog=self.get_full_command_name(),
@@ -728,8 +739,6 @@ class Calculation(VerdiCommandWithSubcommands):
         if not is_dbenv_loaded():
             load_dbenv()
 
-        from aiida.backends.utils import get_automatic_user
-        from aiida.orm.authinfo import AuthInfo
         from aiida.common.utils import query_yes_no
         from aiida.orm.computer import Computer as OrmComputer
         from aiida.orm.user import User as OrmUser
@@ -753,7 +762,8 @@ class Calculation(VerdiCommandWithSubcommands):
                 return
 
         qb_user_filters = dict()
-        user = OrmUser(dbuser=get_automatic_user())
+	# TODO: @mu fix this, can't get automatic user this way anymore
+        user = orm.get_automatic_user()
         qb_user_filters["email"] = user.email
 
         qb_computer_filters = dict()
@@ -806,9 +816,9 @@ class Calculation(VerdiCommandWithSubcommands):
         remotes = {}
         for computer in comp_uuid_to_computers.values():
             # initialize a key of info for a given computer
-            remotes[computer.name] = {'transport': AuthInfo.get(
-                computer=computer, user=user).get_transport(),
-                                      'computer': computer,
+            remotes[computer.name] = {
+                'transport': self.backend.authinfos.get(computer, user).get_transport(),
+                'computer': computer,
             }
 
             # select the calc pks done on this computer
