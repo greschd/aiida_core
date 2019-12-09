@@ -70,6 +70,16 @@ class AiidaProcessDirective(Directive):
         self.module_name = self.options['module']
         self.process_name = self.module_name + '.' + self.class_name
         self.process = get_object_from_string(self.process_name)
+
+        # Force re-building the spec. This is needed because
+        # 'sphinx.util.inspect.safe_getattr' and 'sphinx.util.inspect.safe_getmembers'
+        # might swallow exceptions that occur when the spec is previously
+        # built, resulting in an incomplete spec.
+        try:
+            del self.process._spec
+        except AttributeError:
+            pass
+
         self.process_spec = self.process.spec()
 
     def build_node_tree(self):
